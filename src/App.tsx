@@ -71,8 +71,10 @@ function App() {
     setRendering(true);
     setTimeout(() => {
       const aspect = image.naturalHeight / image.naturalWidth;
+      const previewW = Math.min(1000, window.innerWidth - 420);
+      const scale = exportWidth / previewW;
       const h = Math.round(exportWidth * aspect);
-      const result = compositeAll(image, layers, settings, exportWidth, h);
+      const result = compositeAll(image, layers, settings, exportWidth, h, scale);
       const link = document.createElement('a');
       link.download = 'ascii-art.png';
       link.href = result.toDataURL('image/png');

@@ -449,19 +449,19 @@ export function renderAsciiLayer(
   layer: Layer,
   outW: number,
   outH: number,
+  scale: number = 1,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = outW;
   canvas.height = outH;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, outW, outH);
 
-  const fontStr = `${layer.fontSize}px "Courier New", Courier, monospace`;
+  const scaledFontSize = layer.fontSize * scale;
+  const fontStr = `${scaledFontSize}px "Courier New", Courier, monospace`;
   ctx.font = fontStr;
   const baseAdvance = ctx.measureText('M').width;
-  const cellW = baseAdvance + layer.charSpacing;
-  const cellH = layer.fontSize * 1.2;
+  const cellW = baseAdvance + layer.charSpacing * scale;
+  const cellH = scaledFontSize * 1.2;
 
   const cols = Math.floor(outW / cellW);
   const rows = Math.floor(outH / cellH);
@@ -513,6 +513,7 @@ export function compositeAll(
   settings: GlobalSettings,
   outW: number,
   outH: number,
+  scale: number = 1,
 ): HTMLCanvasElement {
   const srcCanvas = document.createElement('canvas');
   srcCanvas.width = sourceImage.naturalWidth;
@@ -525,12 +526,10 @@ export function compositeAll(
   result.width = outW;
   result.height = outH;
   const ctx = result.getContext('2d')!;
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, outW, outH);
 
   for (const layer of layers) {
     if (!layer.enabled) continue;
-    const layerCanvas = renderAsciiLayer(adjusted, layer, outW, outH);
+    const layerCanvas = renderAsciiLayer(adjusted, layer, outW, outH, scale);
     ctx.save();
     ctx.globalAlpha = layer.opacity;
     ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;
