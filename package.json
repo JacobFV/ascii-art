@@ -7,6 +7,7 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
+    "canvas": "^3.2.1",
     "gifenc": "^1.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
