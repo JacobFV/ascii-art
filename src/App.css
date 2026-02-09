@@ -139,6 +139,10 @@ body {
 .layer-card:hover {
   border-color: #e94560;
 }
+.layer-card.drag-over {
+  border-color: #e94560;
+  border-style: dashed;
+}
 
 .layer-header {
   display: flex;

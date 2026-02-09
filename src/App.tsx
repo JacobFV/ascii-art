@@ -19,6 +19,8 @@ function App() {
   const [exportWidth, setExportWidth] = useState(4000);
   const [rendering, setRendering] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,7 +179,26 @@ function App() {
           <h2>Layers ({layers.length})</h2>
           <div className="layer-list">
             {layers.map((layer, i) => (
-              <div key={layer.id} className={`layer-card ${layer.enabled ? '' : 'disabled'}`}>
+              <div key={layer.id}
+                className={`layer-card ${layer.enabled ? '' : 'disabled'}${dragOverIdx === i ? ' drag-over' : ''}`}
+                draggable
+                onDragStart={() => setDragIdx(i)}
+                onDragOver={e => { e.preventDefault(); setDragOverIdx(i); }}
+                onDragLeave={() => setDragOverIdx(null)}
+                onDrop={() => {
+                  if (dragIdx !== null && dragIdx !== i) {
+                    setLayers(ls => {
+                      const copy = [...ls];
+                      const [moved] = copy.splice(dragIdx, 1);
+                      copy.splice(i, 0, moved);
+                      return copy;
+                    });
+                  }
+                  setDragIdx(null);
+                  setDragOverIdx(null);
+                }}
+                onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+                style={{ opacity: dragIdx === i ? 0.4 : 1 }}>
                 <div className="layer-header">
                   <input type="checkbox" checked={layer.enabled}
                     onChange={e => updateLayer(layer.id, { enabled: e.target.checked })} />
