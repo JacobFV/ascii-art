@@ -4,6 +4,7 @@ import {
   RAMP_PRESETS, FONT_OPTIONS, defaultLayer, defaultSettings,
   compositeAll, renderAsciiText, renderAsciiSVG,
 } from './engine';
+import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
 interface Preset {
   name: string;
@@ -93,13 +94,18 @@ function App() {
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const [webcamActive, setWebcamActive] = useState(false);
+  const [gifProgress, setGifProgress] = useState<string | null>(null);
+  const [gifFps, setGifFps] = useState(10);
+  const [gifWidth, setGifWidth] = useState(400);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const renderTimer = useRef<number>(0);
   const webcamStream = useRef<MediaStream | null>(null);
   const webcamVideo = useRef<HTMLVideoElement | null>(null);
   const webcamInterval = useRef<number>(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Load sample image on mount
   useEffect(() => {
@@ -245,6 +251,95 @@ function App() {
     URL.revokeObjectURL(link.href);
   }, [image, layers, settings]);
 
+  const handleVideoFile = useCallback((file: File) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.src = url;
+    video.onloadedmetadata = () => {
+      videoRef.current = video;
+      // Show first frame as preview
+      video.currentTime = 0;
+      video.onseeked = () => {
+        const c = document.createElement('canvas');
+        c.width = video.videoWidth;
+        c.height = video.videoHeight;
+        c.getContext('2d')!.drawImage(video, 0, 0);
+        const img = new Image();
+        img.onload = () => setImage(img);
+        img.src = c.toDataURL();
+        video.onseeked = null;
+      };
+    };
+  }, []);
+
+  const handleExportGIF = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    setGifProgress('Preparing...');
+    const duration = video.duration;
+    const frameDelay = Math.round(1000 / gifFps);
+    const totalFrames = Math.floor(duration * gifFps);
+    const w = gifWidth;
+    const aspect = video.videoHeight / video.videoWidth;
+    const h = Math.round(w * aspect);
+
+    const gif = GIFEncoder();
+
+    const seekTo = (time: number): Promise<void> =>
+      new Promise(resolve => {
+        video.onseeked = () => resolve();
+        video.currentTime = Math.min(time, duration);
+      });
+
+    for (let i = 0; i < totalFrames; i++) {
+      setGifProgress(`Frame ${i + 1}/${totalFrames}`);
+      await seekTo(i / gifFps);
+
+      // Draw video frame to canvas
+      const vc = document.createElement('canvas');
+      vc.width = video.videoWidth;
+      vc.height = video.videoHeight;
+      vc.getContext('2d')!.drawImage(video, 0, 0);
+      const frameImg = new Image();
+      await new Promise<void>(resolve => {
+        frameImg.onload = () => resolve();
+        frameImg.src = vc.toDataURL();
+      });
+
+      // Render through ASCII pipeline
+      const result = compositeAll(frameImg, layers, settings, w, h);
+      const ctx = result.getContext('2d')!;
+      const imageData = ctx.getImageData(0, 0, w, h);
+
+      // Quantize and encode
+      const palette = quantize(imageData.data, 256);
+      const index = applyPalette(imageData.data, palette);
+      gif.writeFrame(index, w, h, {
+        palette,
+        delay: frameDelay,
+        ...(i === 0 ? { repeat: 0 } : {}),
+      });
+
+      // Yield to keep UI responsive
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    setGifProgress('Encoding...');
+    gif.finish();
+
+    const blob = new Blob([gif.bytes()], { type: 'image/gif' });
+    const link = document.createElement('a');
+    link.download = 'ascii-art.gif';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setGifProgress(null);
+  }, [layers, settings, gifFps, gifWidth]);
+
   const updateLayer = (id: string, patch: Partial<Layer>) =>
     setLayers(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
   const removeLayer = (id: string) =>
@@ -286,6 +381,8 @@ function App() {
           <h2>Source Image</h2>
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
             onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          <input ref={videoInputRef} type="file" accept="video/*,.gif" style={{ display: 'none' }}
+            onChange={e => e.target.files?.[0] && handleVideoFile(e.target.files[0])} />
           <div className={`upload-zone ${image ? 'has-image' : ''}`}
             onClick={() => fileInputRef.current?.click()}
             onDrop={onDrop}
@@ -293,10 +390,16 @@ function App() {
             onDragLeave={e => e.currentTarget.classList.remove('dragover')}>
             {image ? <img src={image.src} alt="source" /> : 'Drop image here or click to upload'}
           </div>
-          <button className="add-layer-btn" style={{ marginTop: 8 }}
-            onClick={webcamActive ? stopWebcam : startWebcam}>
-            {webcamActive ? '\u23F9 Stop Webcam' : '\u25CF Use Webcam'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="add-layer-btn" style={{ flex: 1 }}
+              onClick={() => videoInputRef.current?.click()}>
+              Load Video
+            </button>
+            <button className="add-layer-btn" style={{ flex: 1 }}
+              onClick={webcamActive ? stopWebcam : startWebcam}>
+              {webcamActive ? '\u23F9 Stop Webcam' : '\u25CF Webcam'}
+            </button>
+          </div>
         </div>
 
         {/* Global Adjustments */}
@@ -537,6 +640,27 @@ function App() {
               Copy Text
             </button>
           </div>
+
+          {videoRef.current && (
+            <div style={{ marginTop: 12, borderTop: '1px solid #333', paddingTop: 10 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Animated GIF</div>
+              <div className="export-row">
+                <input type="number" value={gifWidth}
+                  onChange={e => setGifWidth(parseInt(e.target.value) || 200)} />
+                <span style={{ fontSize: 12, color: '#666' }}>px</span>
+                <input type="number" value={gifFps} style={{ width: 50 }}
+                  onChange={e => setGifFps(Math.max(1, Math.min(30, parseInt(e.target.value) || 10)))} />
+                <span style={{ fontSize: 12, color: '#666' }}>fps</span>
+              </div>
+              <div className="export-row" style={{ marginTop: 6 }}>
+                <button className="export-btn" onClick={handleExportGIF}
+                  disabled={!!gifProgress}
+                  style={{ background: gifProgress ? '#555' : '#e94560' }}>
+                  {gifProgress || 'Export GIF'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
