@@ -17,6 +17,7 @@ export interface Layer {
   charSpacing: number; // 0-5 extra px between chars
   color: string;       // hex color for characters
   colorMode: boolean;  // tint chars with source pixel color
+  fontFamily: string;  // monospace font family
 }
 
 export interface GlobalSettings {
@@ -45,6 +46,11 @@ export const RAMP_PRESETS: Record<string, string> = {
   'Binary': '@ ',
 };
 
+export const FONT_OPTIONS = [
+  'Courier New', 'Consolas', 'Monaco', 'Menlo',
+  'Lucida Console', 'monospace',
+];
+
 export function defaultLayer(id?: string): Layer {
   return {
     id: id || crypto.randomUUID(),
@@ -63,6 +69,7 @@ export function defaultLayer(id?: string): Layer {
     charSpacing: 0,
     color: '#000000',
     colorMode: false,
+    fontFamily: 'Courier New',
   };
 }
 
@@ -464,7 +471,7 @@ export function renderAsciiLayer(
   const ctx = canvas.getContext('2d')!;
 
   const scaledFontSize = layer.fontSize * scale;
-  const fontStr = `${scaledFontSize}px "Courier New", Courier, monospace`;
+  const fontStr = `${scaledFontSize}px "${layer.fontFamily}", monospace`;
   ctx.font = fontStr;
   const baseAdvance = ctx.measureText('M').width;
   const cellW = baseAdvance + layer.charSpacing * scale;

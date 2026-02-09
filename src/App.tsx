@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   type Layer, type GlobalSettings,
-  RAMP_PRESETS, defaultLayer, defaultSettings,
+  RAMP_PRESETS, FONT_OPTIONS, defaultLayer, defaultSettings,
   compositeAll,
 } from './engine';
 
@@ -202,6 +202,14 @@ function App() {
                     onChange={v => updateLayer(layer.id, { fontSize: v })} />
                   <Slider label="Char Space" value={layer.charSpacing} min={0} max={10}
                     onChange={v => updateLayer(layer.id, { charSpacing: v })} />
+
+                  <div className="control-row">
+                    <label>Font</label>
+                    <select value={layer.fontFamily}
+                      onChange={e => updateLayer(layer.id, { fontFamily: e.target.value })}>
+                      {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
 
                   <div className="control-row">
                     <label>Algorithm</label>
