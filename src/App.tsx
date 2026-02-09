@@ -3,6 +3,7 @@ import {
   type Layer, type GlobalSettings,
   RAMP_PRESETS, FONT_OPTIONS, defaultLayer, defaultSettings,
   compositeAll, renderAsciiText, renderAsciiSVG, createAdjustedCanvas,
+  autoOptimizeSettings,
 } from './engine';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
@@ -497,16 +498,21 @@ function App() {
 
         {/* Global Adjustments */}
         <div className="section">
-          <h2>Image Adjustments</h2>
-          <Slider label="Contrast" value={settings.contrast} min={0} max={300}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <h2 style={{ marginBottom: 0 }}>Image Adjustments</h2>
+            <button className="auto-btn" onClick={() => {
+              if (image) setSettings(autoOptimizeSettings(image, settings));
+            }} disabled={!image}>Auto</button>
+          </div>
+          <Slider label="Contrast" value={settings.contrast} min={0} max={300} step={0.5}
             onChange={v => updateSetting('contrast', v)} />
-          <Slider label="Brightness" value={settings.brightness} min={-150} max={150}
+          <Slider label="Brightness" value={settings.brightness} min={-150} max={150} step={0.5}
             onChange={v => updateSetting('brightness', v)} />
-          <Slider label="Gamma" value={settings.gamma} min={0.1} max={3} step={0.05}
+          <Slider label="Gamma" value={settings.gamma} min={0.1} max={3} step={0.01}
             format={v => v.toFixed(2)} onChange={v => updateSetting('gamma', v)} />
-          <Slider label="Black Point" value={settings.blackPoint} min={0} max={200}
+          <Slider label="Black Point" value={settings.blackPoint} min={0} max={200} step={0.5}
             onChange={v => updateSetting('blackPoint', v)} />
-          <Slider label="White Point" value={settings.whitePoint} min={55} max={255}
+          <Slider label="White Point" value={settings.whitePoint} min={55} max={255} step={0.5}
             onChange={v => updateSetting('whitePoint', v)} />
           <Slider label="Blur" value={settings.blur} min={0} max={10} step={0.5}
             format={v => v.toFixed(1)} onChange={v => updateSetting('blur', v)} />
@@ -782,12 +788,18 @@ function Slider({ label, value, min, max, step, onChange, format }: {
   label: string; value: number; min: number; max: number;
   step?: number; onChange: (v: number) => void; format?: (v: number) => string;
 }) {
+  const s = step || 1;
   return (
     <div className="control-row">
       <label>{label}</label>
-      <input type="range" min={min} max={max} step={step || 1}
+      <input type="range" min={min} max={max} step={s}
         value={value} onChange={e => onChange(parseFloat(e.target.value))} />
-      <span className="value">{format ? format(value) : String(Math.round(value * 100) / 100)}</span>
+      <input type="number" className="slider-num" min={min} max={max} step={s}
+        value={format ? format(value) : String(Math.round(value * 100) / 100)}
+        onChange={e => {
+          const v = parseFloat(e.target.value);
+          if (!isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
+        }} />
     </div>
   );
 }

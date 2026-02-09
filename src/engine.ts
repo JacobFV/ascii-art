@@ -177,6 +177,72 @@ export function defaultSettings(): GlobalSettings {
   };
 }
 
+// ---- Auto-optimize image settings ----
+
+export function autoOptimizeSettings(
+  sourceImage: HTMLImageElement,
+  current: GlobalSettings,
+): GlobalSettings {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.min(sourceImage.naturalWidth, 512);
+  const scale = canvas.width / sourceImage.naturalWidth;
+  canvas.height = Math.round(sourceImage.naturalHeight * scale);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const pixels = canvas.width * canvas.height;
+
+  // Build luminance histogram
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < pixels; i++) {
+    const lum = Math.round(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
+    hist[lum]++;
+  }
+
+  // Find black/white points at 0.5% and 99.5% percentiles
+  const lo = Math.round(pixels * 0.005);
+  const hi = Math.round(pixels * 0.995);
+  let cumulative = 0;
+  let blackPoint = 0;
+  let whitePoint = 255;
+  for (let i = 0; i < 256; i++) {
+    cumulative += hist[i];
+    if (cumulative >= lo && blackPoint === 0) blackPoint = i;
+    if (cumulative >= hi) { whitePoint = i; break; }
+  }
+
+  // Compute mean luminance within the clipped range
+  let sum = 0, count = 0;
+  for (let i = blackPoint; i <= whitePoint; i++) {
+    sum += i * hist[i];
+    count += hist[i];
+  }
+  const mean = count > 0 ? sum / count : 128;
+
+  // Target: push mean toward 128 (middle grey)
+  const brightness = Math.round((128 - mean) * 0.6);
+
+  // Gamma: correct midtone. If image is dark (mean < 128), gamma < 1 brightens;
+  // if light (mean > 128), gamma > 1 darkens
+  const normalizedMean = (mean - blackPoint) / Math.max(1, whitePoint - blackPoint);
+  const gamma = normalizedMean > 0.01
+    ? Math.max(0.3, Math.min(2.5, Math.log(0.5) / Math.log(normalizedMean)))
+    : 1.0;
+
+  // Contrast: scale based on tonal range utilization
+  const range = whitePoint - blackPoint;
+  const contrast = range < 180 ? Math.round(100 * (220 / Math.max(1, range))) : 100;
+
+  return {
+    ...current,
+    blackPoint: Math.max(0, blackPoint - 2),
+    whitePoint: Math.min(255, whitePoint + 2),
+    brightness: Math.max(-150, Math.min(150, brightness)),
+    contrast: Math.max(80, Math.min(200, contrast)),
+    gamma: Math.round(gamma * 100) / 100,
+  };
+}
+
 // ---- Low-level image ops ----
 
 function getGreyscale(canvas: HTMLCanvasElement): Float32Array {
