@@ -161,6 +161,19 @@ body {
 .layer-header input[type="checkbox"] {
   accent-color: #e94560;
 }
+.drag-handle {
+  cursor: grab;
+  color: #555;
+  font-size: 14px;
+  padding: 0 2px;
+  user-select: none;
+}
+.drag-handle:hover {
+  color: #e94560;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
 .layer-header .layer-name {
   flex: 1;
   font-size: 13px;

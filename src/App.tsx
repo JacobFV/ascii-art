@@ -165,7 +165,7 @@ function App() {
   const [layers, setLayers] = useState<Layer[]>(BUILT_IN_PRESETS['Default'].layers);
   const [settings, setSettings] = useState<GlobalSettings>(defaultSettings());
   const [savedPresets, setSavedPresets] = useState<Record<string, Preset>>(loadSavedPresets);
-  const [exportWidth, setExportWidth] = useState(4000);
+  const [exportWidth, setExportWidth] = useState(16000);
   const [rendering, setRendering] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -569,8 +569,6 @@ function App() {
             {layers.map((layer, i) => (
               <div key={layer.id}
                 className={`layer-card ${layer.enabled ? '' : 'disabled'}${dragOverIdx === i ? ' drag-over' : ''}`}
-                draggable
-                onDragStart={() => setDragIdx(i)}
                 onDragOver={e => { e.preventDefault(); setDragOverIdx(i); }}
                 onDragLeave={() => setDragOverIdx(null)}
                 onDrop={() => {
@@ -588,6 +586,8 @@ function App() {
                 onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
                 style={{ opacity: dragIdx === i ? 0.4 : 1 }}>
                 <div className="layer-header">
+                  <span className="drag-handle" draggable
+                    onDragStart={() => setDragIdx(i)}>&#x2630;</span>
                   <input type="checkbox" checked={layer.enabled}
                     onChange={e => updateLayer(layer.id, { enabled: e.target.checked })} />
                   <span className="layer-name" onClick={() => toggleCollapse(layer.id)}
@@ -607,7 +607,7 @@ function App() {
                       onChange={e => updateLayer(layer.id, { name: e.target.value })} />
                   </div>
 
-                  <Slider label="Font Size" value={layer.fontSize} min={3} max={60}
+                  <Slider label="Font Size" value={layer.fontSize} min={1} max={60}
                     onChange={v => updateLayer(layer.id, { fontSize: v })} />
                   <Slider label="Char Space" value={layer.charSpacing} min={0} max={10}
                     onChange={v => updateLayer(layer.id, { charSpacing: v })} />
