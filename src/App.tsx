@@ -291,9 +291,11 @@ function App() {
       setRendering(true);
       requestAnimationFrame(() => {
         const aspect = image.naturalHeight / image.naturalWidth;
-        const previewW = getBaseWidth();
-        const previewH = Math.round(previewW * aspect);
-        const result = compositeAll(image, layers, settings, previewW, previewH);
+        const baseW = getBaseWidth();
+        const scale = exportWidth / baseW;
+        const fullW = exportWidth;
+        const fullH = Math.round(fullW * aspect);
+        const result = compositeAll(image, layers, settings, fullW, fullH, scale);
         const canvas = canvasRef.current!;
         canvas.width = result.width;
         canvas.height = result.height;
@@ -301,7 +303,7 @@ function App() {
         setRendering(false);
       });
     }, 250);
-  }, [image, layers, settings, getBaseWidth]);
+  }, [image, layers, settings, getBaseWidth, exportWidth]);
 
   // Render adjusted image preview
   useEffect(() => {
