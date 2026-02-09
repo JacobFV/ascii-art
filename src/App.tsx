@@ -159,6 +159,17 @@ function App() {
             <input type="checkbox" checked={settings.invert}
               onChange={e => updateSetting('invert', e.target.checked)} />
           </div>
+          <div className="control-row">
+            <label>Background</label>
+            <input type="color" value={settings.backgroundColor === 'transparent' ? '#ffffff' : settings.backgroundColor}
+              onChange={e => updateSetting('backgroundColor', e.target.value)}
+              disabled={settings.backgroundColor === 'transparent'} />
+            <label style={{ minWidth: 'auto', marginLeft: 4 }}>
+              <input type="checkbox" checked={settings.backgroundColor === 'transparent'}
+                onChange={e => updateSetting('backgroundColor', e.target.checked ? 'transparent' : '#ffffff')} />
+              {' '}None
+            </label>
+          </div>
         </div>
 
         {/* Layers */}

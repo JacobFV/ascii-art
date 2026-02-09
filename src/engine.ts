@@ -30,6 +30,7 @@ export interface GlobalSettings {
   blur: number;         // 0-10 gaussian blur radius
   sharpen: number;      // 0-300 unsharp mask amount
   posterize: number;    // 0=off, 2-16 levels
+  backgroundColor: string; // hex color or 'transparent'
 }
 
 export const RAMP_PRESETS: Record<string, string> = {
@@ -77,6 +78,7 @@ export function defaultSettings(): GlobalSettings {
     blur: 0,
     sharpen: 0,
     posterize: 0,
+    backgroundColor: 'transparent',
   };
 }
 
@@ -541,6 +543,11 @@ export function compositeAll(
   result.width = outW;
   result.height = outH;
   const ctx = result.getContext('2d')!;
+
+  if (settings.backgroundColor !== 'transparent') {
+    ctx.fillStyle = settings.backgroundColor;
+    ctx.fillRect(0, 0, outW, outH);
+  }
 
   for (const layer of layers) {
     if (!layer.enabled) continue;
