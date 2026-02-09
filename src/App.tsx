@@ -69,6 +69,84 @@ const BUILT_IN_PRESETS: Record<string, Preset> = {
     ],
     settings: { ...defaultSettings(), backgroundColor: '#1a3a5c' },
   },
+  'Retro Terminal': {
+    name: 'Retro Terminal',
+    layers: [
+      { ...defaultLayer(), name: 'CP437', fontSize: 8, ramp: RAMP_PRESETS['Code Page 437'], color: '#33ff33',
+        algorithm: 'brightness', dithering: 'ordered', contrast: 130 },
+    ],
+    settings: { ...defaultSettings(), backgroundColor: '#0a0a0a', posterize: 6 },
+  },
+  'Neon': {
+    name: 'Neon',
+    layers: [
+      { ...defaultLayer(), name: 'Glow', fontSize: 10, ramp: RAMP_PRESETS['Blocks & Shapes'], colorMode: true,
+        algorithm: 'brightness', dithering: 'floyd-steinberg', contrast: 160 },
+      { ...defaultLayer(), name: 'Edges', fontSize: 14, ramp: RAMP_PRESETS['Blocks & Shapes'], color: '#ff00ff',
+        algorithm: 'edges', dithering: 'none', contrast: 250, edgeSensitivity: 200, opacity: 0.7 },
+    ],
+    settings: { ...defaultSettings(), backgroundColor: '#0d0d0d', sharpen: 80 },
+  },
+  'Stencil': {
+    name: 'Stencil',
+    layers: [
+      { ...defaultLayer(), name: 'Fill', fontSize: 16, ramp: RAMP_PRESETS['Alphabetic'],
+        algorithm: 'brightness', dithering: 'atkinson', contrast: 200, threshold: 40 },
+    ],
+    settings: { ...defaultSettings(), posterize: 3 },
+  },
+  'Mosaic': {
+    name: 'Mosaic',
+    layers: [
+      { ...defaultLayer(), name: 'Blocks', fontSize: 12, ramp: RAMP_PRESETS['Blocks & Shapes'], colorMode: true,
+        algorithm: 'brightness', dithering: 'ordered', contrast: 100 },
+    ],
+    settings: defaultSettings(),
+  },
+  'Math Art': {
+    name: 'Math Art',
+    layers: [
+      { ...defaultLayer(), name: 'Symbols', fontSize: 10, ramp: RAMP_PRESETS['Math & Symbols'],
+        algorithm: 'detail', dithering: 'floyd-steinberg', contrast: 130, edgeSensitivity: 120 },
+    ],
+    settings: { ...defaultSettings(), sharpen: 60 },
+  },
+  'High Contrast': {
+    name: 'High Contrast',
+    layers: [
+      { ...defaultLayer(), name: 'Bold', fontSize: 10, ramp: RAMP_PRESETS['Binary'],
+        algorithm: 'brightness', dithering: 'floyd-steinberg', contrast: 200 },
+      { ...defaultLayer(), name: 'Edges', fontSize: 20, ramp: '#. ',
+        algorithm: 'edges', dithering: 'none', contrast: 300, edgeSensitivity: 200, opacity: 0.8 },
+    ],
+    settings: { ...defaultSettings(), blackPoint: 30, whitePoint: 220 },
+  },
+  'Newspaper': {
+    name: 'Newspaper',
+    layers: [
+      { ...defaultLayer(), name: 'Halftone', fontSize: 6, ramp: RAMP_PRESETS['Dots'],
+        algorithm: 'brightness', dithering: 'ordered', contrast: 110 },
+    ],
+    settings: { ...defaultSettings(), backgroundColor: '#f5f0e8', posterize: 8 },
+  },
+  'Arrows': {
+    name: 'Arrows',
+    layers: [
+      { ...defaultLayer(), name: 'Flow', fontSize: 12, ramp: RAMP_PRESETS['Arrows & Chevrons'],
+        algorithm: 'detail', dithering: 'atkinson', contrast: 140, edgeSensitivity: 130 },
+    ],
+    settings: { ...defaultSettings(), sharpen: 50 },
+  },
+  'Color Photo': {
+    name: 'Color Photo',
+    layers: [
+      { ...defaultLayer(), name: 'Fine', fontSize: 4, ramp: RAMP_PRESETS['Detailed'], colorMode: true,
+        algorithm: 'brightness', dithering: 'atkinson', contrast: 100 },
+      { ...defaultLayer(), name: 'Detail', fontSize: 10, ramp: RAMP_PRESETS['Dense'], colorMode: true,
+        algorithm: 'detail', dithering: 'floyd-steinberg', contrast: 120, opacity: 0.6, edgeSensitivity: 100 },
+    ],
+    settings: { ...defaultSettings(), backgroundColor: '#ffffff' },
+  },
 };
 
 function loadSavedPresets(): Record<string, Preset> {

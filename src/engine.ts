@@ -35,15 +35,22 @@ export interface GlobalSettings {
 }
 
 export const RAMP_PRESETS: Record<string, string> = {
+  // Classic
   'Standard': '@%#*+=-:. ',
   'Detailed': "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'. ",
   'Simple': '#=-. ',
-  'Blocks': '\u2588\u2593\u2592\u2591 ',
   'Dense': '@#MW&%*+=-:. ',
   'Minimal': '@. ',
+  'Binary': '@ ',
+  // Specialty
   'Hatching': '#/|\\-. ',
   'Dots': '@o:. ',
-  'Binary': '@ ',
+  'Alphabetic': 'MWBHAXYVTISJ. ',
+  'Alphanumeric': 'MW8B6H9A5X4V3T2IS1J. ',
+  'Arrows & Chevrons': '\u25C6\u25C4\u25BA\u25B2\u25BC\u00AB\u00BB><^v. ',
+  'Code Page 437': '\u2588\u2593\u2592\u2591\u2563\u2551\u2557\u255D\u255A\u2554\u2560\u256C\u2569\u2566\u2550\u256B. ',
+  'Blocks & Shapes': '\u2588\u2593\u2592\u2591\u25A0\u25B0\u2584\u2580\u258C\u2590\u25CF\u25CB\u25AA\u25AB. ',
+  'Math & Symbols': '\u2234\u2261\u2248\u00B1\u221E\u2211\u220F\u221A\u00D7\u00F7\u2206\u03C0\u2207\u00B7. ',
 };
 
 export const FONT_OPTIONS = [
