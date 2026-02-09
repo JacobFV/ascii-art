@@ -92,9 +92,14 @@ function App() {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
+  const [webcamActive, setWebcamActive] = useState(false);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renderTimer = useRef<number>(0);
+  const webcamStream = useRef<MediaStream | null>(null);
+  const webcamVideo = useRef<HTMLVideoElement | null>(null);
+  const webcamInterval = useRef<number>(0);
 
   // Load sample image on mount
   useEffect(() => {
@@ -117,6 +122,48 @@ function App() {
     e.stopPropagation();
     if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
   }, [handleFile]);
+
+  const stopWebcam = useCallback(() => {
+    clearInterval(webcamInterval.current);
+    if (webcamStream.current) {
+      webcamStream.current.getTracks().forEach(t => t.stop());
+      webcamStream.current = null;
+    }
+    if (webcamVideo.current) {
+      webcamVideo.current.remove();
+      webcamVideo.current = null;
+    }
+    setWebcamActive(false);
+  }, []);
+
+  const startWebcam = useCallback(async () => {
+    stopWebcam();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      webcamStream.current = stream;
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      await video.play();
+      webcamVideo.current = video;
+      setWebcamActive(true);
+
+      // Capture frames as images at ~10fps
+      webcamInterval.current = window.setInterval(() => {
+        if (!video.videoWidth) return;
+        const c = document.createElement('canvas');
+        c.width = video.videoWidth;
+        c.height = video.videoHeight;
+        c.getContext('2d')!.drawImage(video, 0, 0);
+        const img = new Image();
+        img.onload = () => setImage(img);
+        img.src = c.toDataURL();
+      }, 100);
+    } catch (e) {
+      console.error('Webcam error:', e);
+    }
+  }, [stopWebcam]);
 
   const loadPreset = useCallback((preset: Preset) => {
     setLayers(preset.layers.map(l => ({ ...l, id: crypto.randomUUID() })));
@@ -246,6 +293,10 @@ function App() {
             onDragLeave={e => e.currentTarget.classList.remove('dragover')}>
             {image ? <img src={image.src} alt="source" /> : 'Drop image here or click to upload'}
           </div>
+          <button className="add-layer-btn" style={{ marginTop: 8 }}
+            onClick={webcamActive ? stopWebcam : startWebcam}>
+            {webcamActive ? '\u23F9 Stop Webcam' : '\u25CF Use Webcam'}
+          </button>
         </div>
 
         {/* Global Adjustments */}
