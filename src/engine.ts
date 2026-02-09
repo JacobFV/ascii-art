@@ -18,6 +18,7 @@ export interface Layer {
   color: string;       // hex color for characters
   colorMode: boolean;  // tint chars with source pixel color
   fontFamily: string;  // monospace font family
+  renderMode: 'dark-on-light' | 'light-on-dark';
 }
 
 export interface GlobalSettings {
@@ -48,7 +49,7 @@ export const RAMP_PRESETS: Record<string, string> = {
   'Alphabetic': 'MWBHAXYVTISJ. ',
   'Alphanumeric': 'MW8B6H9A5X4V3T2IS1J. ',
   'Arrows & Chevrons': '\u25C6\u25C4\u25BA\u25B2\u25BC\u00AB\u00BB><^v. ',
-  'Code Page 437': '\u2588\u2593\u2592\u2591\u2563\u2551\u2557\u255D\u255A\u2554\u2560\u256C\u2569\u2566\u2550\u256B. ',
+  'Code Page 437': '\u2588\u2593\u2592\u2591\u256C\u2560\u2563\u2566\u2569\u2554\u2557\u255A\u255D\u2551\u2550\u2500\u2502\u253C\u2524\u251C\u2534\u252C\u250C\u2510\u2514\u2518\u00B7. ',
   'Blocks & Shapes': '\u2588\u2593\u2592\u2591\u25A0\u25B0\u2584\u2580\u258C\u2590\u25CF\u25CB\u25AA\u25AB. ',
   'Math & Symbols': '\u2234\u2261\u2248\u00B1\u221E\u2211\u220F\u221A\u00D7\u00F7\u2206\u03C0\u2207\u00B7. ',
 };
@@ -57,6 +58,85 @@ export const FONT_OPTIONS = [
   'Courier New', 'Consolas', 'Monaco', 'Menlo',
   'Lucida Console', 'monospace',
 ];
+
+// ---- Character density measurement ----
+
+const densityCache = new Map<string, Map<string, number>>();
+
+function measureCharDensities(chars: string, fontFamily: string, fontSize: number): Map<string, number> {
+  const uniqueChars = [...new Set(chars)].sort().join('');
+  const cacheKey = `${fontFamily}|${fontSize}|${uniqueChars}`;
+  const cached = densityCache.get(cacheKey);
+  if (cached) return cached;
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  ctx.font = `${fontSize}px "${fontFamily}", monospace`;
+  const cellW = Math.ceil(ctx.measureText('M').width);
+  const cellH = Math.ceil(fontSize * 1.2);
+  canvas.width = cellW;
+  canvas.height = cellH;
+
+  const densities = new Map<string, number>();
+  const totalPixels = cellW * cellH;
+
+  for (const ch of uniqueChars) {
+    if (ch === ' ') {
+      densities.set(ch, 0);
+      continue;
+    }
+    ctx.clearRect(0, 0, cellW, cellH);
+    ctx.font = `${fontSize}px "${fontFamily}", monospace`;
+    ctx.fillStyle = 'white';
+    ctx.textBaseline = 'top';
+    ctx.fillText(ch, 0, 0);
+    const imgData = ctx.getImageData(0, 0, cellW, cellH).data;
+    let filled = 0;
+    for (let i = 3; i < imgData.length; i += 4) {
+      if (imgData[i] > 0) filled++;
+    }
+    densities.set(ch, filled / totalPixels);
+  }
+
+  densityCache.set(cacheKey, densities);
+  return densities;
+}
+
+function buildCharLUT(ramp: string, fontFamily: string, fontSize: number): string[] {
+  const densities = measureCharDensities(ramp, fontFamily, fontSize);
+
+  // Get unique chars sorted by ascending density
+  const uniqueChars = [...new Set(ramp)];
+  uniqueChars.sort((a, b) => (densities.get(a) || 0) - (densities.get(b) || 0));
+
+  const charDensityPairs = uniqueChars.map(ch => ({
+    ch,
+    density: densities.get(ch) || 0,
+  }));
+
+  // Build 256-entry LUT
+  const lut: string[] = new Array(256);
+  const minD = charDensityPairs[0].density;
+  const maxD = charDensityPairs[charDensityPairs.length - 1].density;
+  const range = maxD - minD || 1;
+
+  for (let i = 0; i < 256; i++) {
+    const targetDensity = minD + (i / 255) * range;
+    // Linear scan (typically ~15 chars) to find best match
+    let best = charDensityPairs[0];
+    let bestDist = Math.abs(best.density - targetDensity);
+    for (let j = 1; j < charDensityPairs.length; j++) {
+      const dist = Math.abs(charDensityPairs[j].density - targetDensity);
+      if (dist < bestDist) {
+        best = charDensityPairs[j];
+        bestDist = dist;
+      }
+    }
+    lut[i] = best.ch;
+  }
+
+  return lut;
+}
 
 export function defaultLayer(id?: string): Layer {
   return {
@@ -77,6 +157,7 @@ export function defaultLayer(id?: string): Layer {
     color: '#000000',
     colorMode: false,
     fontFamily: 'Courier New',
+    renderMode: 'dark-on-light',
   };
 }
 
@@ -328,7 +409,7 @@ function sobelEdges(grey: Float32Array, w: number, h: number, sensitivity: numbe
 
 // ---- Stipple (random placement weighted by intensity) ----
 
-function stippleIntensity(grey: Float32Array, w: number, h: number): Float32Array {
+function stippleIntensity(grey: Float32Array, w: number, h: number, darkOnLight: boolean): Float32Array {
   const result = new Float32Array(w * h);
   // Use seeded-ish random for consistency
   let seed = 42;
@@ -336,7 +417,7 @@ function stippleIntensity(grey: Float32Array, w: number, h: number): Float32Arra
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      const darkness = 255 - grey[i];
+      const darkness = darkOnLight ? 255 - grey[i] : grey[i];
       // Higher darkness = higher probability of placing a character
       result[i] = rand() < (darkness / 255) * (darkness / 255) ? darkness * 1.5 : 0;
     }
@@ -351,13 +432,15 @@ function computeIntensity(
   algorithm: Layer['algorithm'],
   contrast: number, invert: boolean, threshold: number,
   edgeSensitivity: number,
+  renderMode: Layer['renderMode'] = 'dark-on-light',
 ): Float32Array {
   let intensity: Float32Array;
+  const darkOnLight = renderMode === 'dark-on-light';
 
   switch (algorithm) {
     case 'brightness':
       intensity = new Float32Array(grey.length);
-      for (let i = 0; i < grey.length; i++) intensity[i] = 255 - grey[i];
+      for (let i = 0; i < grey.length; i++) intensity[i] = darkOnLight ? 255 - grey[i] : grey[i];
       break;
     case 'edges':
       intensity = sobelEdges(grey, w, h, edgeSensitivity);
@@ -381,12 +464,13 @@ function computeIntensity(
       for (let i = 0; i < grey.length; i++) {
         const e = max > 0 ? (edges[i] / max) * 255 : 0;
         const hp = Math.abs(grey[i] - blurred[i]) * 3;
-        intensity[i] = e * 0.5 + hp * 0.3 + (255 - grey[i]) * 0.2;
+        const bright = darkOnLight ? 255 - grey[i] : grey[i];
+        intensity[i] = e * 0.5 + hp * 0.3 + bright * 0.2;
       }
       break;
     }
     case 'stipple':
-      intensity = stippleIntensity(grey, w, h);
+      intensity = stippleIntensity(grey, w, h, darkOnLight);
       break;
   }
 
@@ -496,7 +580,7 @@ export function renderAsciiLayer(
   let intensity = computeIntensity(
     grey, cols, rows, layer.algorithm,
     layer.contrast, layer.invert, layer.threshold,
-    layer.edgeSensitivity,
+    layer.edgeSensitivity, layer.renderMode,
   );
 
   // Apply dithering
@@ -504,8 +588,8 @@ export function renderAsciiLayer(
     intensity = applyDithering(intensity, cols, rows, layer.dithering, layer.ramp.length);
   }
 
-  const ramp = layer.ramp;
-  const n = ramp.length;
+  // Build density-aware character lookup table
+  const charLUT = buildCharLUT(layer.ramp, layer.fontFamily, scaledFontSize);
 
   // Sample color data if colorMode enabled
   let colorData: Uint8ClampedArray | null = null;
@@ -522,8 +606,7 @@ export function renderAsciiLayer(
     for (let c = 0; c < cols; c++) {
       const val = Math.max(0, Math.min(255, intensity[r * cols + c]));
       if (val < 3) continue;
-      const idx = Math.min(Math.floor(val / 256 * n), n - 1);
-      const ch = ramp[idx];
+      const ch = charLUT[Math.min(255, Math.max(0, Math.round(val)))];
       if (ch === ' ') continue;
       if (colorData) {
         const pi = (r * cols + c) * 4;
@@ -563,19 +646,17 @@ export function renderAsciiText(
     let intensity = computeIntensity(
       grey, cols, rows, layer.algorithm,
       layer.contrast, layer.invert, layer.threshold,
-      layer.edgeSensitivity,
+      layer.edgeSensitivity, layer.renderMode,
     );
     if (layer.dithering !== 'none') {
       intensity = applyDithering(intensity, cols, rows, layer.dithering, layer.ramp.length);
     }
-    const ramp = layer.ramp;
-    const n = ramp.length;
+    const charLUT = buildCharLUT(layer.ramp, layer.fontFamily, 12);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const val = Math.max(0, Math.min(255, intensity[r * cols + c]));
         if (val < 3) continue;
-        const idx = Math.min(Math.floor(val / 256 * n), n - 1);
-        const ch = ramp[idx];
+        const ch = charLUT[Math.min(255, Math.max(0, Math.round(val)))];
         if (ch !== ' ') grid[r][c] = ch;
       }
     }
@@ -633,7 +714,7 @@ export function renderAsciiSVG(
     let intensity = computeIntensity(
       grey, cols, rows, layer.algorithm,
       layer.contrast, layer.invert, layer.threshold,
-      layer.edgeSensitivity,
+      layer.edgeSensitivity, layer.renderMode,
     );
     if (layer.dithering !== 'none') {
       intensity = applyDithering(intensity, cols, rows, layer.dithering, layer.ramp.length);
@@ -646,8 +727,7 @@ export function renderAsciiSVG(
       colorData = colorSampled.getContext('2d')!.getImageData(0, 0, cols, rows).data;
     }
 
-    const ramp = layer.ramp;
-    const n = ramp.length;
+    const charLUT = buildCharLUT(layer.ramp, fontFamily, fontSize);
     const opacity = layer.opacity < 1 ? ` opacity="${layer.opacity}"` : '';
 
     parts.push(`<g font-family="'${escapeXml(fontFamily)}', monospace" font-size="${fontSize}"${opacity}>`);
@@ -656,8 +736,7 @@ export function renderAsciiSVG(
       for (let c = 0; c < cols; c++) {
         const val = Math.max(0, Math.min(255, intensity[r * cols + c]));
         if (val < 3) continue;
-        const idx = Math.min(Math.floor(val / 256 * n), n - 1);
-        const ch = ramp[idx];
+        const ch = charLUT[Math.min(255, Math.max(0, Math.round(val)))];
         if (ch === ' ') continue;
         let fill = layer.color;
         if (colorData) {

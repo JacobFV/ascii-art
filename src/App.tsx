@@ -47,7 +47,7 @@ const BUILT_IN_PRESETS: Record<string, Preset> = {
     name: 'Matrix',
     layers: [
       { ...defaultLayer(), name: 'Code', fontSize: 10, ramp: '01 ', color: '#00ff41',
-        algorithm: 'brightness', dithering: 'floyd-steinberg', contrast: 150 },
+        algorithm: 'brightness', dithering: 'floyd-steinberg', contrast: 150, renderMode: 'light-on-dark' },
     ],
     settings: { ...defaultSettings(), backgroundColor: '#000000' },
   },
@@ -63,9 +63,9 @@ const BUILT_IN_PRESETS: Record<string, Preset> = {
     name: 'Blueprint',
     layers: [
       { ...defaultLayer(), name: 'Lines', fontSize: 8, ramp: RAMP_PRESETS['Dense'], color: '#ffffff',
-        algorithm: 'edges', dithering: 'none', contrast: 200, edgeSensitivity: 180 },
+        algorithm: 'edges', dithering: 'none', contrast: 200, edgeSensitivity: 180, renderMode: 'light-on-dark' },
       { ...defaultLayer(), name: 'Fill', fontSize: 6, ramp: RAMP_PRESETS['Simple'], color: '#88bbff',
-        algorithm: 'brightness', dithering: 'atkinson', contrast: 60, opacity: 0.4 },
+        algorithm: 'brightness', dithering: 'atkinson', contrast: 60, opacity: 0.4, renderMode: 'light-on-dark' },
     ],
     settings: { ...defaultSettings(), backgroundColor: '#1a3a5c' },
   },
@@ -73,7 +73,7 @@ const BUILT_IN_PRESETS: Record<string, Preset> = {
     name: 'Retro Terminal',
     layers: [
       { ...defaultLayer(), name: 'CP437', fontSize: 8, ramp: RAMP_PRESETS['Code Page 437'], color: '#33ff33',
-        algorithm: 'brightness', dithering: 'ordered', contrast: 130 },
+        algorithm: 'brightness', dithering: 'ordered', contrast: 130, renderMode: 'light-on-dark' },
     ],
     settings: { ...defaultSettings(), backgroundColor: '#0a0a0a', posterize: 6 },
   },
@@ -81,7 +81,7 @@ const BUILT_IN_PRESETS: Record<string, Preset> = {
     name: 'Neon',
     layers: [
       { ...defaultLayer(), name: 'Glow', fontSize: 10, ramp: RAMP_PRESETS['Blocks & Shapes'], colorMode: true,
-        algorithm: 'brightness', dithering: 'floyd-steinberg', contrast: 160 },
+        algorithm: 'brightness', dithering: 'floyd-steinberg', contrast: 160, renderMode: 'light-on-dark' },
       { ...defaultLayer(), name: 'Edges', fontSize: 14, ramp: RAMP_PRESETS['Blocks & Shapes'], color: '#ff00ff',
         algorithm: 'edges', dithering: 'none', contrast: 250, edgeSensitivity: 200, opacity: 0.7 },
     ],
@@ -677,6 +677,15 @@ function App() {
                         onChange={e => updateLayer(layer.id, { colorMode: e.target.checked })} />
                       {' '}Source
                     </label>
+                  </div>
+
+                  <div className="control-row">
+                    <label>Mode</label>
+                    <select value={layer.renderMode}
+                      onChange={e => updateLayer(layer.id, { renderMode: e.target.value as Layer['renderMode'] })}>
+                      <option value="dark-on-light">Dark chars</option>
+                      <option value="light-on-dark">Light chars</option>
+                    </select>
                   </div>
 
                   <Slider label="Contrast" value={layer.contrast} min={0} max={400}
