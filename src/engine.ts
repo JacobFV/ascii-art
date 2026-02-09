@@ -21,6 +21,11 @@ export interface Layer {
   renderMode: 'dark-on-light' | 'light-on-dark';
 }
 
+export interface CurvePoint {
+  x: number; // 0-1, input brightness
+  y: number; // 0-1, output brightness
+}
+
 export interface GlobalSettings {
   contrast: number;
   brightness: number;
@@ -33,6 +38,7 @@ export interface GlobalSettings {
   sharpen: number;      // 0-300 unsharp mask amount
   posterize: number;    // 0=off, 2-16 levels
   backgroundColor: string; // hex color or 'transparent'
+  toneCurve: CurvePoint[];  // custom tone curve control points
 }
 
 export const RAMP_PRESETS: Record<string, string> = {
@@ -174,7 +180,118 @@ export function defaultSettings(): GlobalSettings {
     sharpen: 0,
     posterize: 0,
     backgroundColor: 'transparent',
+    toneCurve: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
   };
+}
+
+// ---- Tone curve ----
+
+function monotoneCubicInterpolate(points: CurvePoint[]): Uint8Array {
+  const lut = new Uint8Array(256);
+  const n = points.length;
+  if (n < 2) {
+    for (let i = 0; i < 256; i++) lut[i] = i;
+    return lut;
+  }
+
+  // Check if it's a linear identity (skip computation)
+  if (n === 2 && points[0].x === 0 && points[0].y === 0 && points[1].x === 1 && points[1].y === 1) {
+    for (let i = 0; i < 256; i++) lut[i] = i;
+    return lut;
+  }
+
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+
+  // Compute slopes (Fritsch-Carlson monotone cubic)
+  const dx: number[] = [];
+  const dy: number[] = [];
+  const m: number[] = new Array(n);
+
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(xs[i + 1] - xs[i]);
+    dy.push(ys[i + 1] - ys[i]);
+  }
+
+  // Natural tangents
+  m[0] = dx.length > 0 ? dy[0] / dx[0] : 0;
+  m[n - 1] = dx.length > 0 ? dy[n - 2] / dx[n - 2] : 0;
+  for (let i = 1; i < n - 1; i++) {
+    if (dy[i - 1] * dy[i] <= 0) {
+      m[i] = 0;
+    } else {
+      m[i] = (dy[i - 1] / dx[i - 1] + dy[i] / dx[i]) / 2;
+    }
+  }
+
+  // Monotonicity constraints
+  for (let i = 0; i < n - 1; i++) {
+    if (Math.abs(dy[i]) < 1e-10) {
+      m[i] = 0;
+      m[i + 1] = 0;
+    } else {
+      const s = dy[i] / dx[i];
+      const a = m[i] / s;
+      const b = m[i + 1] / s;
+      const h = Math.sqrt(a * a + b * b);
+      if (h > 3) {
+        m[i] = 3 * a / h * s;
+        m[i + 1] = 3 * b / h * s;
+      }
+    }
+  }
+
+  // Evaluate for each of 256 entries
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255;
+    // Clamp to curve bounds
+    if (t <= xs[0]) { lut[i] = Math.max(0, Math.min(255, Math.round(ys[0] * 255))); continue; }
+    if (t >= xs[n - 1]) { lut[i] = Math.max(0, Math.min(255, Math.round(ys[n - 1] * 255))); continue; }
+
+    // Find segment
+    let seg = 0;
+    for (let j = 0; j < n - 1; j++) {
+      if (t >= xs[j] && t < xs[j + 1]) { seg = j; break; }
+    }
+
+    const h = dx[seg];
+    const s = (t - xs[seg]) / h;
+    const s2 = s * s;
+    const s3 = s2 * s;
+
+    // Hermite basis
+    const h00 = 2 * s3 - 3 * s2 + 1;
+    const h10 = s3 - 2 * s2 + s;
+    const h01 = -2 * s3 + 3 * s2;
+    const h11 = s3 - s2;
+
+    const val = h00 * ys[seg] + h10 * h * m[seg] + h01 * ys[seg + 1] + h11 * h * m[seg + 1];
+    lut[i] = Math.max(0, Math.min(255, Math.round(val * 255)));
+  }
+
+  return lut;
+}
+
+export function buildToneCurveLUT(points: CurvePoint[]): Uint8Array {
+  const sorted = [...points].sort((a, b) => a.x - b.x);
+  return monotoneCubicInterpolate(sorted);
+}
+
+export function getHistogram(sourceImage: HTMLImageElement): Uint32Array {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.min(sourceImage.naturalWidth, 512);
+  const scale = canvas.width / sourceImage.naturalWidth;
+  canvas.height = Math.round(sourceImage.naturalHeight * scale);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const hist = new Uint32Array(256);
+  const pixels = canvas.width * canvas.height;
+  for (let i = 0; i < pixels; i++) {
+    const lum = Math.round(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
+    hist[lum]++;
+  }
+  return hist;
 }
 
 // ---- Auto-optimize image settings ----
@@ -581,6 +698,9 @@ export function createAdjustedCanvas(
   const wp = settings.whitePoint;
   const range = Math.max(1, wp - bp);
 
+  // Build tone curve LUT (identity curve skips this step)
+  const curveLUT = settings.toneCurve.length >= 2 ? buildToneCurveLUT(settings.toneCurve) : null;
+
   for (let i = 0; i < grey.length; i++) {
     let v = grey[i];
 
@@ -596,6 +716,11 @@ export function createAdjustedCanvas(
     // Gamma
     v = Math.max(0, v);
     v = 255 * Math.pow(v / 255, settings.gamma);
+
+    // Tone curve
+    if (curveLUT) {
+      v = curveLUT[Math.max(0, Math.min(255, Math.round(v)))];
+    }
 
     // Posterize
     if (settings.posterize >= 2) {

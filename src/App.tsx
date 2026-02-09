@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  type Layer, type GlobalSettings,
+  type Layer, type GlobalSettings, type CurvePoint,
   RAMP_PRESETS, FONT_OPTIONS, defaultLayer, defaultSettings,
   compositeAll, renderAsciiText, renderAsciiSVG, createAdjustedCanvas,
-  autoOptimizeSettings,
+  autoOptimizeSettings, getHistogram, buildToneCurveLUT,
 } from './engine';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
@@ -172,6 +172,7 @@ function App() {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
+  const [histogram, setHistogram] = useState<Uint32Array | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
   const [gifProgress, setGifProgress] = useState<string | null>(null);
   const [gifFps, setGifFps] = useState(10);
@@ -194,6 +195,12 @@ function App() {
     img.onload = () => setImage(img);
     img.src = '/sample.jpg';
   }, []);
+
+  // Compute histogram when image changes
+  useEffect(() => {
+    if (image) setHistogram(getHistogram(image));
+    else setHistogram(null);
+  }, [image]);
 
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -539,6 +546,11 @@ function App() {
             </label>
           </div>
           {image && <canvas ref={adjustedCanvasRef} className="adjusted-preview" />}
+          <ToneCurveEditor
+            points={settings.toneCurve}
+            histogram={histogram}
+            onChange={pts => updateSetting('toneCurve', pts)}
+          />
         </div>
 
         {/* Presets */}
@@ -779,6 +791,167 @@ function App() {
         {image
           ? <canvas ref={canvasRef} />
           : <div className="preview-placeholder">Upload an image to get started</div>}
+      </div>
+    </div>
+  );
+}
+
+function ToneCurveEditor({ points, histogram, onChange }: {
+  points: CurvePoint[];
+  histogram: Uint32Array | null;
+  onChange: (pts: CurvePoint[]) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [dragging, setDragging] = useState<number | null>(null);
+  const W = 280, H = 180, PAD = 8;
+  const iw = W - PAD * 2, ih = H - PAD * 2;
+
+  const toScreen = (p: CurvePoint) => ({ sx: PAD + p.x * iw, sy: PAD + (1 - p.y) * ih });
+  const fromScreen = (sx: number, sy: number): CurvePoint => ({
+    x: Math.max(0, Math.min(1, (sx - PAD) / iw)),
+    y: Math.max(0, Math.min(1, 1 - (sy - PAD) / ih)),
+  });
+
+  // Draw
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = '#0a0a1e';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.strokeStyle = '#1a2a40';
+    ctx.lineWidth = 0.5;
+    for (let i = 1; i < 4; i++) {
+      const x = PAD + (i / 4) * iw;
+      const y = PAD + (i / 4) * ih;
+      ctx.beginPath(); ctx.moveTo(x, PAD); ctx.lineTo(x, PAD + ih); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(PAD + iw, y); ctx.stroke();
+    }
+
+    // Identity line
+    ctx.strokeStyle = '#2a3a50';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(PAD, PAD + ih);
+    ctx.lineTo(PAD + iw, PAD);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Histogram
+    if (histogram) {
+      let maxH = 0;
+      for (let i = 0; i < 256; i++) if (histogram[i] > maxH) maxH = histogram[i];
+      if (maxH > 0) {
+        ctx.fillStyle = 'rgba(100, 100, 180, 0.25)';
+        for (let i = 0; i < 256; i++) {
+          const bx = PAD + (i / 255) * iw;
+          const bh = (histogram[i] / maxH) * ih * 0.9;
+          ctx.fillRect(bx, PAD + ih - bh, Math.max(1, iw / 256), bh);
+        }
+      }
+    }
+
+    // Curve (evaluated via LUT)
+    const lut = buildToneCurveLUT(points);
+    ctx.strokeStyle = '#e94560';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 256; i++) {
+      const sx = PAD + (i / 255) * iw;
+      const sy = PAD + (1 - lut[i] / 255) * ih;
+      if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+
+    // Control points
+    const sorted = [...points].sort((a, b) => a.x - b.x);
+    sorted.forEach((p, i) => {
+      const { sx, sy } = toScreen(p);
+      ctx.beginPath();
+      ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i === dragging ? '#ff6b8a' : '#e94560';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+  }, [points, histogram, dragging]);
+
+  const getPos = (e: React.MouseEvent) => {
+    const rect = canvasRef.current!.getBoundingClientRect();
+    return { mx: e.clientX - rect.left, my: e.clientY - rect.top };
+  };
+
+  const findPoint = (mx: number, my: number): number | null => {
+    const sorted = [...points].sort((a, b) => a.x - b.x);
+    for (let i = 0; i < sorted.length; i++) {
+      const { sx, sy } = toScreen(sorted[i]);
+      if (Math.hypot(mx - sx, my - sy) < 10) {
+        // Return index in original array
+        return points.indexOf(sorted[i]);
+      }
+    }
+    return null;
+  };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    const { mx, my } = getPos(e);
+    const idx = findPoint(mx, my);
+    if (idx !== null) {
+      setDragging(idx);
+    } else {
+      // Add new point
+      const p = fromScreen(mx, my);
+      const newPts = [...points, p];
+      onChange(newPts);
+      setDragging(newPts.length - 1);
+    }
+  };
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (dragging === null) return;
+    const { mx, my } = getPos(e);
+    const p = fromScreen(mx, my);
+    const newPts = [...points];
+    newPts[dragging] = p;
+    onChange(newPts);
+  };
+
+  const onMouseUp = () => setDragging(null);
+
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const { mx, my } = getPos(e);
+    const idx = findPoint(mx, my);
+    if (idx !== null && points.length > 2) {
+      onChange(points.filter((_, i) => i !== idx));
+    }
+  };
+
+  return (
+    <div className="tone-curve-wrap">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 11, color: '#888' }}>Tone Curve</span>
+        <button className="auto-btn" style={{ fontSize: 10, padding: '2px 8px' }}
+          onClick={() => onChange([{ x: 0, y: 0 }, { x: 1, y: 1 }])}>Reset</button>
+      </div>
+      <canvas
+        ref={canvasRef}
+        width={W} height={H}
+        className="tone-curve-canvas"
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onDoubleClick={onDoubleClick}
+      />
+      <div style={{ fontSize: 10, color: '#555', marginTop: 2 }}>
+        Click to add points. Drag to adjust. Double-click to remove.
       </div>
     </div>
   );

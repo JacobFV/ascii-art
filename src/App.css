@@ -55,6 +55,17 @@ body {
   border: 1px solid #333;
 }
 
+/* ---- Tone Curve ---- */
+.tone-curve-wrap {
+  margin-top: 10px;
+}
+.tone-curve-canvas {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #333;
+  cursor: crosshair;
+}
+
 /* ---- Upload ---- */
 .upload-zone {
   border: 2px dashed #444;
