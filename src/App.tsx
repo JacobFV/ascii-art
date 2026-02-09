@@ -239,6 +239,12 @@ function App() {
                       style={{ fontFamily: 'monospace', fontSize: 11 }} />
                   </div>
 
+                  <div className="control-row">
+                    <label>Color</label>
+                    <input type="color" value={layer.color}
+                      onChange={e => updateLayer(layer.id, { color: e.target.value })} />
+                  </div>
+
                   <Slider label="Contrast" value={layer.contrast} min={0} max={400}
                     onChange={v => updateLayer(layer.id, { contrast: v })} />
                   <Slider label="Opacity" value={layer.opacity} min={0} max={1} step={0.05}

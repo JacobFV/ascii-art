@@ -15,6 +15,7 @@ export interface Layer {
   threshold: number;
   edgeSensitivity: number;
   charSpacing: number; // 0-5 extra px between chars
+  color: string;       // hex color for characters
 }
 
 export interface GlobalSettings {
@@ -58,6 +59,7 @@ export function defaultLayer(id?: string): Layer {
     threshold: 5,
     edgeSensitivity: 100,
     charSpacing: 0,
+    color: '#000000',
   };
 }
 
@@ -486,7 +488,7 @@ export function renderAsciiLayer(
   const ramp = layer.ramp;
   const n = ramp.length;
 
-  ctx.fillStyle = 'black';
+  ctx.fillStyle = layer.color;
   ctx.font = fontStr;
   ctx.textBaseline = 'top';
 
