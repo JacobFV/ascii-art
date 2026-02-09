@@ -5,17 +5,87 @@ import {
   compositeAll, renderAsciiText, renderAsciiSVG,
 } from './engine';
 
+interface Preset {
+  name: string;
+  layers: Layer[];
+  settings: GlobalSettings;
+}
+
+const BUILT_IN_PRESETS: Record<string, Preset> = {
+  'Default': {
+    name: 'Default',
+    layers: [
+      { ...defaultLayer(), name: 'Fine Dither', fontSize: 5, ramp: RAMP_PRESETS['Detailed'],
+        algorithm: 'brightness', dithering: 'atkinson', contrast: 100, opacity: 0.6 },
+      { ...defaultLayer(), name: 'Medium', fontSize: 12, ramp: RAMP_PRESETS['Standard'],
+        algorithm: 'detail', dithering: 'floyd-steinberg', contrast: 120 },
+      { ...defaultLayer(), name: 'Edges', fontSize: 22, ramp: RAMP_PRESETS['Dense'],
+        algorithm: 'edges', dithering: 'none', contrast: 150, threshold: 10, edgeSensitivity: 120 },
+    ],
+    settings: defaultSettings(),
+  },
+  'Sketch': {
+    name: 'Sketch',
+    layers: [
+      { ...defaultLayer(), name: 'Hatching', fontSize: 10, ramp: RAMP_PRESETS['Hatching'],
+        algorithm: 'edges', dithering: 'none', contrast: 200, edgeSensitivity: 150 },
+      { ...defaultLayer(), name: 'Detail', fontSize: 6, ramp: '/|\\-. ',
+        algorithm: 'detail', dithering: 'atkinson', contrast: 80, opacity: 0.5 },
+    ],
+    settings: { ...defaultSettings(), sharpen: 100 },
+  },
+  'Halftone': {
+    name: 'Halftone',
+    layers: [
+      { ...defaultLayer(), name: 'Dots', fontSize: 8, ramp: RAMP_PRESETS['Dots'],
+        algorithm: 'brightness', dithering: 'ordered', contrast: 120 },
+    ],
+    settings: defaultSettings(),
+  },
+  'Matrix': {
+    name: 'Matrix',
+    layers: [
+      { ...defaultLayer(), name: 'Code', fontSize: 10, ramp: '01 ', color: '#00ff41',
+        algorithm: 'brightness', dithering: 'floyd-steinberg', contrast: 150 },
+    ],
+    settings: { ...defaultSettings(), backgroundColor: '#000000' },
+  },
+  'Typewriter': {
+    name: 'Typewriter',
+    layers: [
+      { ...defaultLayer(), name: 'Type', fontSize: 14, ramp: RAMP_PRESETS['Standard'],
+        algorithm: 'brightness', dithering: 'none', contrast: 140, fontFamily: 'Courier New' },
+    ],
+    settings: { ...defaultSettings(), posterize: 4 },
+  },
+  'Blueprint': {
+    name: 'Blueprint',
+    layers: [
+      { ...defaultLayer(), name: 'Lines', fontSize: 8, ramp: RAMP_PRESETS['Dense'], color: '#ffffff',
+        algorithm: 'edges', dithering: 'none', contrast: 200, edgeSensitivity: 180 },
+      { ...defaultLayer(), name: 'Fill', fontSize: 6, ramp: RAMP_PRESETS['Simple'], color: '#88bbff',
+        algorithm: 'brightness', dithering: 'atkinson', contrast: 60, opacity: 0.4 },
+    ],
+    settings: { ...defaultSettings(), backgroundColor: '#1a3a5c' },
+  },
+};
+
+function loadSavedPresets(): Record<string, Preset> {
+  try {
+    const raw = localStorage.getItem('ascii-art-presets');
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveSavedPresets(presets: Record<string, Preset>) {
+  localStorage.setItem('ascii-art-presets', JSON.stringify(presets));
+}
+
 function App() {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [layers, setLayers] = useState<Layer[]>([
-    { ...defaultLayer(), name: 'Fine Dither', fontSize: 5, ramp: RAMP_PRESETS['Detailed'],
-      algorithm: 'brightness', dithering: 'atkinson', contrast: 100, opacity: 0.6 },
-    { ...defaultLayer(), name: 'Medium', fontSize: 12, ramp: RAMP_PRESETS['Standard'],
-      algorithm: 'detail', dithering: 'floyd-steinberg', contrast: 120 },
-    { ...defaultLayer(), name: 'Edges', fontSize: 22, ramp: RAMP_PRESETS['Dense'],
-      algorithm: 'edges', dithering: 'none', contrast: 150, threshold: 10, edgeSensitivity: 120 },
-  ]);
+  const [layers, setLayers] = useState<Layer[]>(BUILT_IN_PRESETS['Default'].layers);
   const [settings, setSettings] = useState<GlobalSettings>(defaultSettings());
+  const [savedPresets, setSavedPresets] = useState<Record<string, Preset>>(loadSavedPresets);
   const [exportWidth, setExportWidth] = useState(4000);
   const [rendering, setRendering] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -47,6 +117,29 @@ function App() {
     e.stopPropagation();
     if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
   }, [handleFile]);
+
+  const loadPreset = useCallback((preset: Preset) => {
+    setLayers(preset.layers.map(l => ({ ...l, id: crypto.randomUUID() })));
+    setSettings(preset.settings);
+  }, []);
+
+  const savePreset = useCallback((name: string) => {
+    const preset: Preset = { name, layers, settings };
+    setSavedPresets(prev => {
+      const next = { ...prev, [name]: preset };
+      saveSavedPresets(next);
+      return next;
+    });
+  }, [layers, settings]);
+
+  const deletePreset = useCallback((name: string) => {
+    setSavedPresets(prev => {
+      const next = { ...prev };
+      delete next[name];
+      saveSavedPresets(next);
+      return next;
+    });
+  }, []);
 
   // Debounced preview render
   useEffect(() => {
@@ -192,6 +285,33 @@ function App() {
               {' '}None
             </label>
           </div>
+        </div>
+
+        {/* Presets */}
+        <div className="section">
+          <h2>Presets</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+            {Object.values(BUILT_IN_PRESETS).map(p => (
+              <button key={p.name} className="preset-btn" onClick={() => loadPreset(p)}>{p.name}</button>
+            ))}
+          </div>
+          {Object.keys(savedPresets).length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>Saved</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {Object.values(savedPresets).map(p => (
+                  <span key={p.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    <button className="preset-btn" onClick={() => loadPreset(p)}>{p.name}</button>
+                    <button className="preset-btn-del" onClick={() => deletePreset(p.name)}>&times;</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <button className="add-layer-btn" onClick={() => {
+            const name = prompt('Preset name:');
+            if (name) savePreset(name);
+          }}>+ Save Current</button>
         </div>
 
         {/* Layers */}

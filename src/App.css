@@ -188,6 +188,30 @@ body {
   color: #e94560;
 }
 
+.preset-btn {
+  padding: 4px 10px;
+  background: #0f3460;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+.preset-btn:hover {
+  border-color: #e94560;
+  color: #e94560;
+}
+.preset-btn-del {
+  padding: 2px 5px;
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 13px;
+}
+.preset-btn-del:hover { color: #e94560; }
+
 /* ---- Export ---- */
 .export-row {
   display: flex;
