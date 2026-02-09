@@ -577,6 +577,98 @@ export function renderAsciiText(
   return grid.map(row => row.join('')).join('\n');
 }
 
+// ---- Export as SVG ----
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+export function renderAsciiSVG(
+  sourceImage: HTMLImageElement,
+  layers: Layer[],
+  settings: GlobalSettings,
+  outW: number,
+  outH: number,
+): string {
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = sourceImage.naturalWidth;
+  srcCanvas.height = sourceImage.naturalHeight;
+  const srcCtx = srcCanvas.getContext('2d')!;
+  srcCtx.drawImage(sourceImage, 0, 0);
+
+  const adjusted = createAdjustedCanvas(srcCanvas, settings);
+  const parts: string[] = [];
+
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="0 0 ${outW} ${outH}">`);
+
+  if (settings.backgroundColor !== 'transparent') {
+    parts.push(`<rect width="100%" height="100%" fill="${escapeXml(settings.backgroundColor)}"/>`);
+  }
+
+  for (const layer of layers) {
+    if (!layer.enabled) continue;
+    const fontSize = layer.fontSize;
+    const fontFamily = layer.fontFamily;
+
+    // Measure character width using a temp canvas
+    const tmpCtx = document.createElement('canvas').getContext('2d')!;
+    tmpCtx.font = `${fontSize}px "${fontFamily}", monospace`;
+    const baseAdvance = tmpCtx.measureText('M').width;
+    const cellW = baseAdvance + layer.charSpacing;
+    const cellH = fontSize * 1.2;
+
+    const cols = Math.floor(outW / cellW);
+    const rows = Math.floor(outH / cellH);
+    if (cols <= 0 || rows <= 0) continue;
+
+    const sampled = resizeCanvas(adjusted, cols, rows);
+    const grey = getGreyscale(sampled);
+    let intensity = computeIntensity(
+      grey, cols, rows, layer.algorithm,
+      layer.contrast, layer.invert, layer.threshold,
+      layer.edgeSensitivity,
+    );
+    if (layer.dithering !== 'none') {
+      intensity = applyDithering(intensity, cols, rows, layer.dithering, layer.ramp.length);
+    }
+
+    // Get color data if needed
+    let colorData: Uint8ClampedArray | null = null;
+    if (layer.colorMode) {
+      const colorSampled = resizeCanvas(srcCanvas, cols, rows);
+      colorData = colorSampled.getContext('2d')!.getImageData(0, 0, cols, rows).data;
+    }
+
+    const ramp = layer.ramp;
+    const n = ramp.length;
+    const opacity = layer.opacity < 1 ? ` opacity="${layer.opacity}"` : '';
+
+    parts.push(`<g font-family="'${escapeXml(fontFamily)}', monospace" font-size="${fontSize}"${opacity}>`);
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const val = Math.max(0, Math.min(255, intensity[r * cols + c]));
+        if (val < 3) continue;
+        const idx = Math.min(Math.floor(val / 256 * n), n - 1);
+        const ch = ramp[idx];
+        if (ch === ' ') continue;
+        let fill = layer.color;
+        if (colorData) {
+          const pi = (r * cols + c) * 4;
+          fill = `rgb(${colorData[pi]},${colorData[pi + 1]},${colorData[pi + 2]})`;
+        }
+        const x = (c * cellW).toFixed(1);
+        const y = (r * cellH + fontSize).toFixed(1);
+        parts.push(`<text x="${x}" y="${y}" fill="${escapeXml(fill)}">${escapeXml(ch)}</text>`);
+      }
+    }
+    parts.push('</g>');
+  }
+
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
 // ---- Composite all layers ----
 
 export function compositeAll(

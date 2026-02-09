@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   type Layer, type GlobalSettings,
   RAMP_PRESETS, FONT_OPTIONS, defaultLayer, defaultSettings,
-  compositeAll, renderAsciiText,
+  compositeAll, renderAsciiText, renderAsciiSVG,
 } from './engine';
 
 function App() {
@@ -89,6 +89,20 @@ function App() {
     if (!image) return;
     const text = renderAsciiText(image, layers, settings, 120);
     navigator.clipboard.writeText(text);
+  }, [image, layers, settings]);
+
+  const handleExportSVG = useCallback(() => {
+    if (!image) return;
+    const aspect = image.naturalHeight / image.naturalWidth;
+    const previewW = Math.min(1000, window.innerWidth - 420);
+    const h = Math.round(previewW * aspect);
+    const svg = renderAsciiSVG(image, layers, settings, previewW, h);
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const link = document.createElement('a');
+    link.download = 'ascii-art.svg';
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    URL.revokeObjectURL(link.href);
   }, [image, layers, settings]);
 
   const updateLayer = (id: string, patch: Partial<Layer>) =>
@@ -343,6 +357,10 @@ function App() {
             </button>
           </div>
           <div className="export-row" style={{ marginTop: 8 }}>
+            <button className="export-btn" onClick={handleExportSVG} disabled={!image || rendering}
+              style={{ background: '#0f3460' }}>
+              Export SVG
+            </button>
             <button className="export-btn" onClick={handleCopyText} disabled={!image}
               style={{ background: '#0f3460' }}>
               Copy Text
