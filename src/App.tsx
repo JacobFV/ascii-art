@@ -281,6 +281,8 @@ function App() {
     });
   }, []);
 
+  const getBaseWidth = useCallback(() => Math.min(1000, window.innerWidth - 420), []);
+
   // Debounced preview render
   useEffect(() => {
     if (!image || !canvasRef.current) return;
@@ -289,7 +291,7 @@ function App() {
       setRendering(true);
       requestAnimationFrame(() => {
         const aspect = image.naturalHeight / image.naturalWidth;
-        const previewW = Math.min(800, window.innerWidth - 420);
+        const previewW = getBaseWidth();
         const previewH = Math.round(previewW * aspect);
         const result = compositeAll(image, layers, settings, previewW, previewH);
         const canvas = canvasRef.current!;
@@ -299,7 +301,7 @@ function App() {
         setRendering(false);
       });
     }, 250);
-  }, [image, layers, settings]);
+  }, [image, layers, settings, getBaseWidth]);
 
   // Render adjusted image preview
   useEffect(() => {
@@ -320,7 +322,7 @@ function App() {
     setRendering(true);
     setTimeout(() => {
       const aspect = image.naturalHeight / image.naturalWidth;
-      const previewW = Math.min(1000, window.innerWidth - 420);
+      const previewW = getBaseWidth();
       const scale = exportWidth / previewW;
       const h = Math.round(exportWidth * aspect);
       const result = compositeAll(image, layers, settings, exportWidth, h, scale);
@@ -330,7 +332,7 @@ function App() {
       link.click();
       setRendering(false);
     }, 50);
-  }, [image, layers, settings, exportWidth]);
+  }, [image, layers, settings, exportWidth, getBaseWidth]);
 
   const handleCopyText = useCallback(() => {
     if (!image) return;
@@ -341,7 +343,7 @@ function App() {
   const handleExportSVG = useCallback(() => {
     if (!image) return;
     const aspect = image.naturalHeight / image.naturalWidth;
-    const previewW = Math.min(1000, window.innerWidth - 420);
+    const previewW = getBaseWidth();
     const h = Math.round(previewW * aspect);
     const svg = renderAsciiSVG(image, layers, settings, previewW, h);
     const blob = new Blob([svg], { type: 'image/svg+xml' });
@@ -350,7 +352,7 @@ function App() {
     link.href = URL.createObjectURL(blob);
     link.click();
     URL.revokeObjectURL(link.href);
-  }, [image, layers, settings]);
+  }, [image, layers, settings, getBaseWidth]);
 
   const handleVideoFile = useCallback((file: File) => {
     const url = URL.createObjectURL(file);
