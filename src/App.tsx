@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   type Layer, type GlobalSettings,
   RAMP_PRESETS, FONT_OPTIONS, defaultLayer, defaultSettings,
-  compositeAll, renderAsciiText, renderAsciiSVG,
+  compositeAll, renderAsciiText, renderAsciiSVG, createAdjustedCanvas,
 } from './engine';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
@@ -177,6 +177,7 @@ function App() {
   const [gifWidth, setGifWidth] = useState(400);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const adjustedCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const renderTimer = useRef<number>(0);
@@ -291,6 +292,20 @@ function App() {
       });
     }, 120);
   }, [image, layers, settings]);
+
+  // Render adjusted image preview
+  useEffect(() => {
+    if (!image || !adjustedCanvasRef.current) return;
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = image.naturalWidth;
+    srcCanvas.height = image.naturalHeight;
+    srcCanvas.getContext('2d')!.drawImage(image, 0, 0);
+    const adjusted = createAdjustedCanvas(srcCanvas, settings);
+    const c = adjustedCanvasRef.current;
+    c.width = adjusted.width;
+    c.height = adjusted.height;
+    c.getContext('2d')!.drawImage(adjusted, 0, 0);
+  }, [image, settings]);
 
   const handleExport = useCallback(() => {
     if (!image) return;
@@ -517,6 +532,7 @@ function App() {
               {' '}None
             </label>
           </div>
+          {image && <canvas ref={adjustedCanvasRef} className="adjusted-preview" />}
         </div>
 
         {/* Presets */}
