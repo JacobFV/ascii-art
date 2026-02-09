@@ -289,7 +289,7 @@ function App() {
       setRendering(true);
       requestAnimationFrame(() => {
         const aspect = image.naturalHeight / image.naturalWidth;
-        const previewW = Math.min(1000, window.innerWidth - 420);
+        const previewW = Math.min(800, window.innerWidth - 420);
         const previewH = Math.round(previewW * aspect);
         const result = compositeAll(image, layers, settings, previewW, previewH);
         const canvas = canvasRef.current!;
@@ -298,7 +298,7 @@ function App() {
         canvas.getContext('2d')!.drawImage(result, 0, 0);
         setRendering(false);
       });
-    }, 120);
+    }, 250);
   }, [image, layers, settings]);
 
   // Render adjusted image preview
@@ -802,18 +802,37 @@ function ToneCurveEditor({ points, histogram, onChange }: {
   onChange: (pts: CurvePoint[]) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [dragging, setDragging] = useState<number | null>(null);
+  const draggingRef = useRef<number | null>(null);
+  const localPtsRef = useRef<CurvePoint[]>(points);
+  const [, forceRedraw] = useState(0);
   const W = 280, H = 180, PAD = 8;
   const iw = W - PAD * 2, ih = H - PAD * 2;
 
+  // Keep local ref in sync when parent updates (e.g. preset load, reset)
+  useEffect(() => {
+    if (draggingRef.current === null) {
+      localPtsRef.current = points;
+    }
+  }, [points]);
+
+  const toCanvas = (e: React.MouseEvent) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    return {
+      cx: (e.clientX - rect.left) * scaleX,
+      cy: (e.clientY - rect.top) * scaleY,
+    };
+  };
+
   const toScreen = (p: CurvePoint) => ({ sx: PAD + p.x * iw, sy: PAD + (1 - p.y) * ih });
-  const fromScreen = (sx: number, sy: number): CurvePoint => ({
-    x: Math.max(0, Math.min(1, (sx - PAD) / iw)),
-    y: Math.max(0, Math.min(1, 1 - (sy - PAD) / ih)),
+  const fromCanvas = (cx: number, cy: number): CurvePoint => ({
+    x: Math.max(0, Math.min(1, (cx - PAD) / iw)),
+    y: Math.max(0, Math.min(1, 1 - (cy - PAD) / ih)),
   });
 
-  // Draw
-  useEffect(() => {
+  const draw = useCallback((pts: CurvePoint[], activeDrag: number | null) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
@@ -823,7 +842,7 @@ function ToneCurveEditor({ points, histogram, onChange }: {
     ctx.fillStyle = '#0a0a1e';
     ctx.fillRect(0, 0, W, H);
 
-    // Grid lines
+    // Grid
     ctx.strokeStyle = '#1a2a40';
     ctx.lineWidth = 0.5;
     for (let i = 1; i < 4; i++) {
@@ -857,8 +876,8 @@ function ToneCurveEditor({ points, histogram, onChange }: {
       }
     }
 
-    // Curve (evaluated via LUT)
-    const lut = buildToneCurveLUT(points);
+    // Curve
+    const lut = buildToneCurveLUT(pts);
     ctx.strokeStyle = '#e94560';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -870,66 +889,76 @@ function ToneCurveEditor({ points, histogram, onChange }: {
     ctx.stroke();
 
     // Control points
-    const sorted = [...points].sort((a, b) => a.x - b.x);
-    sorted.forEach((p, i) => {
+    pts.forEach((p, i) => {
       const { sx, sy } = toScreen(p);
       ctx.beginPath();
       ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = i === dragging ? '#ff6b8a' : '#e94560';
+      ctx.fillStyle = i === activeDrag ? '#ff6b8a' : '#e94560';
       ctx.fill();
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
-  }, [points, histogram, dragging]);
+  }, [histogram]);
 
-  const getPos = (e: React.MouseEvent) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    return { mx: e.clientX - rect.left, my: e.clientY - rect.top };
-  };
+  // Redraw on points/histogram change (when not dragging)
+  useEffect(() => {
+    if (draggingRef.current === null) {
+      draw(points, null);
+    }
+  }, [points, histogram, draw]);
 
-  const findPoint = (mx: number, my: number): number | null => {
-    const sorted = [...points].sort((a, b) => a.x - b.x);
-    for (let i = 0; i < sorted.length; i++) {
-      const { sx, sy } = toScreen(sorted[i]);
-      if (Math.hypot(mx - sx, my - sy) < 10) {
-        // Return index in original array
-        return points.indexOf(sorted[i]);
-      }
+  const findPoint = (cx: number, cy: number, pts: CurvePoint[]): number | null => {
+    for (let i = 0; i < pts.length; i++) {
+      const { sx, sy } = toScreen(pts[i]);
+      if (Math.hypot(cx - sx, cy - sy) < 12) return i;
     }
     return null;
   };
 
   const onMouseDown = (e: React.MouseEvent) => {
-    const { mx, my } = getPos(e);
-    const idx = findPoint(mx, my);
+    e.preventDefault();
+    const { cx, cy } = toCanvas(e);
+    const pts = localPtsRef.current;
+    const idx = findPoint(cx, cy, pts);
     if (idx !== null) {
-      setDragging(idx);
+      draggingRef.current = idx;
+      draw(pts, idx);
     } else {
-      // Add new point
-      const p = fromScreen(mx, my);
-      const newPts = [...points, p];
-      onChange(newPts);
-      setDragging(newPts.length - 1);
+      const p = fromCanvas(cx, cy);
+      const newPts = [...pts, p];
+      localPtsRef.current = newPts;
+      draggingRef.current = newPts.length - 1;
+      draw(newPts, newPts.length - 1);
     }
   };
 
   const onMouseMove = (e: React.MouseEvent) => {
-    if (dragging === null) return;
-    const { mx, my } = getPos(e);
-    const p = fromScreen(mx, my);
-    const newPts = [...points];
-    newPts[dragging] = p;
-    onChange(newPts);
+    if (draggingRef.current === null) return;
+    const { cx, cy } = toCanvas(e);
+    const p = fromCanvas(cx, cy);
+    const pts = [...localPtsRef.current];
+    pts[draggingRef.current] = p;
+    localPtsRef.current = pts;
+    draw(pts, draggingRef.current);
   };
 
-  const onMouseUp = () => setDragging(null);
+  const onMouseUp = () => {
+    if (draggingRef.current !== null) {
+      draggingRef.current = null;
+      onChange(localPtsRef.current);
+    }
+  };
 
   const onDoubleClick = (e: React.MouseEvent) => {
-    const { mx, my } = getPos(e);
-    const idx = findPoint(mx, my);
-    if (idx !== null && points.length > 2) {
-      onChange(points.filter((_, i) => i !== idx));
+    const { cx, cy } = toCanvas(e);
+    const pts = localPtsRef.current;
+    const idx = findPoint(cx, cy, pts);
+    if (idx !== null && pts.length > 2) {
+      const newPts = pts.filter((_, i) => i !== idx);
+      localPtsRef.current = newPts;
+      onChange(newPts);
+      forceRedraw(n => n + 1);
     }
   };
 
