@@ -16,6 +16,7 @@ export interface Layer {
   edgeSensitivity: number;
   charSpacing: number; // 0-5 extra px between chars
   color: string;       // hex color for characters
+  colorMode: boolean;  // tint chars with source pixel color
 }
 
 export interface GlobalSettings {
@@ -60,6 +61,7 @@ export function defaultLayer(id?: string): Layer {
     edgeSensitivity: 100,
     charSpacing: 0,
     color: '#000000',
+    colorMode: false,
   };
 }
 
@@ -452,6 +454,7 @@ export function renderAsciiLayer(
   outW: number,
   outH: number,
   scale: number = 1,
+  colorSource?: HTMLCanvasElement,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = outW;
@@ -488,18 +491,28 @@ export function renderAsciiLayer(
   const ramp = layer.ramp;
   const n = ramp.length;
 
+  // Sample color data if colorMode enabled
+  let colorData: Uint8ClampedArray | null = null;
+  if (layer.colorMode && colorSource) {
+    const colorSampled = resizeCanvas(colorSource, cols, rows);
+    colorData = colorSampled.getContext('2d')!.getImageData(0, 0, cols, rows).data;
+  }
+
   ctx.fillStyle = layer.color;
   ctx.font = fontStr;
   ctx.textBaseline = 'top';
 
   for (let r = 0; r < rows; r++) {
-    // Build the line, placing each char at exact position for alignment
     for (let c = 0; c < cols; c++) {
       const val = Math.max(0, Math.min(255, intensity[r * cols + c]));
       if (val < 3) continue;
       const idx = Math.min(Math.floor(val / 256 * n), n - 1);
       const ch = ramp[idx];
       if (ch === ' ') continue;
+      if (colorData) {
+        const pi = (r * cols + c) * 4;
+        ctx.fillStyle = `rgb(${colorData[pi]},${colorData[pi+1]},${colorData[pi+2]})`;
+      }
       ctx.fillText(ch, c * cellW, r * cellH);
     }
   }
@@ -531,7 +544,7 @@ export function compositeAll(
 
   for (const layer of layers) {
     if (!layer.enabled) continue;
-    const layerCanvas = renderAsciiLayer(adjusted, layer, outW, outH, scale);
+    const layerCanvas = renderAsciiLayer(adjusted, layer, outW, outH, scale, srcCanvas);
     ctx.save();
     ctx.globalAlpha = layer.opacity;
     ctx.globalCompositeOperation = layer.blendMode as GlobalCompositeOperation;

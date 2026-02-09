@@ -242,7 +242,13 @@ function App() {
                   <div className="control-row">
                     <label>Color</label>
                     <input type="color" value={layer.color}
-                      onChange={e => updateLayer(layer.id, { color: e.target.value })} />
+                      onChange={e => updateLayer(layer.id, { color: e.target.value })}
+                      disabled={layer.colorMode} />
+                    <label style={{ minWidth: 'auto', marginLeft: 4 }}>
+                      <input type="checkbox" checked={layer.colorMode}
+                        onChange={e => updateLayer(layer.id, { colorMode: e.target.checked })} />
+                      {' '}Source
+                    </label>
                   </div>
 
                   <Slider label="Contrast" value={layer.contrast} min={0} max={400}
