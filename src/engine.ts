@@ -529,6 +529,54 @@ export function renderAsciiLayer(
   return canvas;
 }
 
+// ---- Render ASCII as plain text ----
+
+export function renderAsciiText(
+  sourceImage: HTMLImageElement,
+  layers: Layer[],
+  settings: GlobalSettings,
+  cols: number,
+): string {
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = sourceImage.naturalWidth;
+  srcCanvas.height = sourceImage.naturalHeight;
+  srcCanvas.getContext('2d')!.drawImage(sourceImage, 0, 0);
+
+  const adjusted = createAdjustedCanvas(srcCanvas, settings);
+  const aspect = sourceImage.naturalHeight / sourceImage.naturalWidth;
+  // Characters are roughly 2x taller than wide
+  const rows = Math.round(cols * aspect * 0.5);
+
+  const grid: string[][] = Array.from({ length: rows }, () => Array(cols).fill(' '));
+
+  for (const layer of layers) {
+    if (!layer.enabled) continue;
+    const sampled = resizeCanvas(adjusted, cols, rows);
+    const grey = getGreyscale(sampled);
+    let intensity = computeIntensity(
+      grey, cols, rows, layer.algorithm,
+      layer.contrast, layer.invert, layer.threshold,
+      layer.edgeSensitivity,
+    );
+    if (layer.dithering !== 'none') {
+      intensity = applyDithering(intensity, cols, rows, layer.dithering, layer.ramp.length);
+    }
+    const ramp = layer.ramp;
+    const n = ramp.length;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const val = Math.max(0, Math.min(255, intensity[r * cols + c]));
+        if (val < 3) continue;
+        const idx = Math.min(Math.floor(val / 256 * n), n - 1);
+        const ch = ramp[idx];
+        if (ch !== ' ') grid[r][c] = ch;
+      }
+    }
+  }
+
+  return grid.map(row => row.join('')).join('\n');
+}
+
 // ---- Composite all layers ----
 
 export function compositeAll(

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   type Layer, type GlobalSettings,
   RAMP_PRESETS, FONT_OPTIONS, defaultLayer, defaultSettings,
-  compositeAll,
+  compositeAll, renderAsciiText,
 } from './engine';
 
 function App() {
@@ -84,6 +84,12 @@ function App() {
       setRendering(false);
     }, 50);
   }, [image, layers, settings, exportWidth]);
+
+  const handleCopyText = useCallback(() => {
+    if (!image) return;
+    const text = renderAsciiText(image, layers, settings, 120);
+    navigator.clipboard.writeText(text);
+  }, [image, layers, settings]);
 
   const updateLayer = (id: string, patch: Partial<Layer>) =>
     setLayers(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
@@ -334,6 +340,12 @@ function App() {
             <span style={{ fontSize: 12, color: '#666' }}>px wide</span>
             <button className="export-btn" onClick={handleExport} disabled={!image || rendering}>
               Export PNG
+            </button>
+          </div>
+          <div className="export-row" style={{ marginTop: 8 }}>
+            <button className="export-btn" onClick={handleCopyText} disabled={!image}
+              style={{ background: '#0f3460' }}>
+              Copy Text
             </button>
           </div>
         </div>
